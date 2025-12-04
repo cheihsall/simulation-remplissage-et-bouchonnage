@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react'
 
-// Simulateur 3D de torréfaction de café avec intégration Way2tech.ai
+// Simulateur 3D de remplissage et bouchonnage de bouteilles d'eau avec intégration Way2tech.ai
 
 function parseParams() {
   const p = new URLSearchParams(window.location.search)
@@ -38,11 +38,12 @@ async function sendWithRetry(url, payload, apiKey, maxAttempts = 3) {
   throw lastErr
 }
 
-// Composant 3D du torréfacteur utilisant Canvas
-function Roaster3D({ temperature, progress, running, drumSpeed }) {
+// Composant 3D de la ligne d'embouteillage utilisant Canvas
+function BottlingLine3D({ waterLevel, progress, running, conveyorSpeed, bottlesFilled, waitingForFilling, waitingForCapping }) {
   const canvasRef = useRef(null)
   const animationRef = useRef(null)
-  const rotationRef = useRef(0)
+  const conveyorPosRef = useRef(0)
+  const bottleAnimRef = useRef([])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -52,135 +53,153 @@ function Roaster3D({ temperature, progress, running, drumSpeed }) {
     const width = canvas.width
     const height = canvas.height
 
+    // Initialiser les bouteilles sur le convoyeur
+    if (bottleAnimRef.current.length === 0) {
+      for (let i = 0; i < 5; i++) {
+        bottleAnimRef.current.push({
+          x: -100 - i * 150,
+          filled: false,
+          capped: false,
+          fillLevel: 0
+        })
+      }
+    }
+
     function draw() {
       ctx.clearRect(0, 0, width, height)
       
       // Fond avec gradient
       const bgGrad = ctx.createLinearGradient(0, 0, 0, height)
-      bgGrad.addColorStop(0, '#1a1a2e')
-      bgGrad.addColorStop(1, '#16213e')
+      bgGrad.addColorStop(0, '#0f172a')
+      bgGrad.addColorStop(1, '#1e293b')
       ctx.fillStyle = bgGrad
       ctx.fillRect(0, 0, width, height)
 
-      // Dessiner la base de la machine (perspective 3D)
       ctx.save()
       ctx.translate(width/2, height/2)
       
-      // Corps de la machine - aspect métallique
-      const bodyGrad = ctx.createLinearGradient(-150, -100, 150, 100)
-      bodyGrad.addColorStop(0, '#4a5568')
-      bodyGrad.addColorStop(0.5, '#718096')
-      bodyGrad.addColorStop(1, '#2d3748')
-      ctx.fillStyle = bodyGrad
+      // Convoyeur (bande transporteuse)
+      ctx.fillStyle = '#374151'
+      ctx.fillRect(-300, 80, 600, 40)
       
-      // Corps principal (trapèze pour effet 3D)
-      ctx.beginPath()
-      ctx.moveTo(-120, -80)
-      ctx.lineTo(120, -80)
-      ctx.lineTo(150, 80)
-      ctx.lineTo(-150, 80)
-      ctx.closePath()
-      ctx.fill()
-      ctx.strokeStyle = '#1a202c'
-      ctx.lineWidth = 3
-      ctx.stroke()
-
-      // Tambour de torréfaction (cylindre rotatif)
-      if (running) {
-        rotationRef.current += drumSpeed
-      }
-      
-      const drumCenterY = -20
-      const drumRadius = 50
-      const drumWidth = 180
-      
-      // Ombre du tambour
-      ctx.fillStyle = 'rgba(0,0,0,0.3)'
-      ctx.beginPath()
-      ctx.ellipse(0, drumCenterY + 5, drumWidth/2, drumRadius*0.3, 0, 0, Math.PI * 2)
-      ctx.fill()
-      
-      // Corps du tambour avec lueur de chaleur
-      const tempRatio = Math.min(temperature / 250, 1)
-      const drumGrad = ctx.createRadialGradient(0, drumCenterY, 0, 0, drumCenterY, drumRadius)
-      drumGrad.addColorStop(0, `rgba(255, ${200 - tempRatio * 150}, ${100 - tempRatio * 100}, 1)`)
-      drumGrad.addColorStop(0.7, `rgba(${150 + tempRatio * 105}, ${100 - tempRatio * 50}, 50, 1)`)
-      drumGrad.addColorStop(1, '#8b4513')
-      
-      ctx.fillStyle = drumGrad
-      ctx.beginPath()
-      ctx.ellipse(0, drumCenterY, drumWidth/2, drumRadius, 0, 0, Math.PI * 2)
-      ctx.fill()
-      
-      // Grille du tambour (rotation)
-      ctx.strokeStyle = 'rgba(139, 69, 19, 0.6)'
+      // Lignes du convoyeur pour effet de mouvement
+      ctx.strokeStyle = '#4b5563'
       ctx.lineWidth = 2
-      for (let i = 0; i < 8; i++) {
-        const angle = (i * Math.PI / 4) + rotationRef.current
-        const x1 = Math.cos(angle) * drumRadius * 0.8
-        const y1 = Math.sin(angle) * drumRadius * 0.3 + drumCenterY
-        const x2 = Math.cos(angle + Math.PI) * drumRadius * 0.8
-        const y2 = Math.sin(angle + Math.PI) * drumRadius * 0.3 + drumCenterY
+      for (let i = 0; i < 15; i++) {
+        const lineX = -300 + ((i * 40 + conveyorPosRef.current) % 600)
         ctx.beginPath()
-        ctx.moveTo(x1, y1)
-        ctx.lineTo(x2, y2)
+        ctx.moveTo(lineX, 80)
+        ctx.lineTo(lineX + 20, 120)
         ctx.stroke()
       }
 
-      // Grains de café à l'intérieur (animés)
-      if (running) {
-        ctx.fillStyle = '#8b4513'
-        for (let i = 0; i < 12; i++) {
-          const beanAngle = (i * Math.PI / 6) + rotationRef.current * 1.5
-          const beanX = Math.cos(beanAngle) * (drumRadius * 0.6)
-          const beanY = Math.sin(beanAngle) * (drumRadius * 0.2) + drumCenterY
+      // Structure de support
+      ctx.fillStyle = '#1f2937'
+      ctx.fillRect(-320, 120, 20, 60)
+      ctx.fillRect(300, 120, 20, 60)
+
+      // Station de remplissage (à gauche)
+      ctx.fillStyle = '#475569'
+      ctx.fillRect(-200, -100, 80, 100)
+      ctx.strokeStyle = '#1e293b'
+      ctx.lineWidth = 3
+      ctx.strokeRect(-200, -100, 80, 100)
+      
+      // Réservoir d'eau
+      const tankGrad = ctx.createLinearGradient(-180, -140, -180, -100)
+      tankGrad.addColorStop(0, '#3b82f6')
+      tankGrad.addColorStop(1, '#1d4ed8')
+      ctx.fillStyle = tankGrad
+      ctx.fillRect(-180, -140, 40, 40)
+      ctx.strokeStyle = '#1e40af'
+      ctx.lineWidth = 2
+      ctx.strokeRect(-180, -140, 40, 40)
+
+      // Bec de remplissage
+      ctx.fillStyle = '#94a3b8'
+      ctx.fillRect(-165, -100, 10, 40)
+      
+      // Effet d'eau qui coule (si en cours de remplissage)
+      if (waitingForFilling && waterLevel < 100) {
+        const waterStream = ctx.createLinearGradient(-160, -60, -160, 20)
+        waterStream.addColorStop(0, 'rgba(59, 130, 246, 0.8)')
+        waterStream.addColorStop(1, 'rgba(59, 130, 246, 0.3)')
+        ctx.fillStyle = waterStream
+        ctx.fillRect(-163, -60, 6, 80)
+        
+        // Gouttes d'eau animées
+        for (let i = 0; i < 3; i++) {
+          const dropY = -60 + (conveyorPosRef.current * 2 + i * 30) % 80
           ctx.beginPath()
-          ctx.ellipse(beanX, beanY, 4, 6, beanAngle, 0, Math.PI * 2)
+          ctx.arc(-160, dropY, 3, 0, Math.PI * 2)
+          ctx.fillStyle = 'rgba(96, 165, 250, 0.6)'
           ctx.fill()
         }
       }
 
-      // Jauge de température sur le côté
-      const gaugeX = 180
-      const gaugeY = -40
-      const gaugeHeight = 120
+      // Station de bouchonnage (à droite)
+      ctx.fillStyle = '#475569'
+      ctx.fillRect(120, -80, 80, 80)
+      ctx.strokeStyle = '#1e293b'
+      ctx.lineWidth = 3
+      ctx.strokeRect(120, -80, 80, 80)
       
-      // Fond de la jauge
-      ctx.fillStyle = '#2d3748'
-      ctx.fillRect(gaugeX - 15, gaugeY - gaugeHeight/2, 30, gaugeHeight)
-      ctx.strokeStyle = '#4a5568'
-      ctx.lineWidth = 2
-      ctx.strokeRect(gaugeX - 15, gaugeY - gaugeHeight/2, 30, gaugeHeight)
+      // Bras de bouchonnage
+      ctx.fillStyle = '#94a3b8'
+      ctx.fillRect(155, -80, 10, 50)
       
-      // Remplissage de température
-      const tempHeight = (temperature / 250) * gaugeHeight
-      const tempGrad = ctx.createLinearGradient(0, gaugeY + gaugeHeight/2, 0, gaugeY - gaugeHeight/2)
-      tempGrad.addColorStop(0, '#10b981')
-      tempGrad.addColorStop(0.5, '#f59e0b')
-      tempGrad.addColorStop(1, '#ef4444')
-      ctx.fillStyle = tempGrad
-      ctx.fillRect(gaugeX - 13, gaugeY + gaugeHeight/2 - tempHeight, 26, tempHeight)
-      
-      // Étiquettes de la jauge
-      ctx.fillStyle = '#e2e8f0'
-      ctx.font = '10px monospace'
-      ctx.textAlign = 'left'
-      ctx.fillText('250°C', gaugeX + 20, gaugeY - gaugeHeight/2 + 5)
-      ctx.fillText('0°C', gaugeX + 20, gaugeY + gaugeHeight/2 + 5)
+      // Distributeur de bouchons
+      ctx.fillStyle = '#ef4444'
+      ctx.fillRect(145, -30, 30, 10)
+
+      // Déplacer et dessiner les bouteilles
+      if (running) {
+        conveyorPosRef.current += conveyorSpeed
+        
+        bottleAnimRef.current.forEach(bottle => {
+          bottle.x += conveyorSpeed
+          
+          // Remplissage quand sous le bec
+          if (bottle.x > -180 && bottle.x < -140 && !bottle.filled) {
+            bottle.fillLevel = Math.min(100, bottle.fillLevel + 2)
+            if (bottle.fillLevel >= 100) {
+              bottle.filled = true
+            }
+          }
+          
+          // Bouchonnage quand sous la station
+          if (bottle.x > 140 && bottle.x < 180 && bottle.filled && !bottle.capped) {
+            bottle.capped = true
+          }
+          
+          // Réinitialiser les bouteilles qui sortent
+          if (bottle.x > 350) {
+            bottle.x = -100
+            bottle.filled = false
+            bottle.capped = false
+            bottle.fillLevel = 0
+          }
+        })
+      }
+
+      // Dessiner les bouteilles
+      bottleAnimRef.current.forEach(bottle => {
+        if (bottle.x > -320 && bottle.x < 320) {
+          drawBottle(ctx, bottle.x, 60, bottle.fillLevel, bottle.capped)
+        }
+      })
 
       // Panneau de contrôle
-      const panelY = 100
-      ctx.fillStyle = '#374151'
-      ctx.fillRect(-100, panelY, 200, 40)
-      ctx.strokeStyle = '#1f2937'
+      const panelY = 140
+      ctx.fillStyle = '#1f2937'
+      ctx.fillRect(-100, panelY, 200, 50)
+      ctx.strokeStyle = '#111827'
       ctx.lineWidth = 2
-      ctx.strokeRect(-100, panelY, 200, 40)
+      ctx.strokeRect(-100, panelY, 200, 50)
       
       // Voyant d'état
-      const lightX = -70
-      const lightY = panelY + 20
       ctx.beginPath()
-      ctx.arc(lightX, lightY, 8, 0, Math.PI * 2)
+      ctx.arc(-70, panelY + 25, 8, 0, Math.PI * 2)
       ctx.fillStyle = running ? '#10b981' : '#6b7280'
       ctx.fill()
       if (running) {
@@ -190,28 +209,69 @@ function Roaster3D({ temperature, progress, running, drumSpeed }) {
         ctx.shadowBlur = 0
       }
       
-      // Affichage numérique
+      // Compteur de bouteilles
       ctx.fillStyle = '#000'
-      ctx.fillRect(-20, panelY + 8, 80, 24)
+      ctx.fillRect(-20, panelY + 10, 80, 30)
       ctx.fillStyle = '#00ff00'
       ctx.font = 'bold 14px monospace'
       ctx.textAlign = 'center'
-      ctx.fillText(`${Math.round(temperature)}°C`, 20, panelY + 25)
-
-      // Effet vapeur/fumée quand chaud et en marche
-      if (running && temperature > 180) {
-        for (let i = 0; i < 3; i++) {
-          const steamY = drumCenterY - drumRadius - 20 - Math.random() * 30
-          const steamX = (Math.random() - 0.5) * 60
-          const steamSize = 15 + Math.random() * 15
-          ctx.fillStyle = `rgba(200, 200, 200, ${0.1 + Math.random() * 0.2})`
-          ctx.beginPath()
-          ctx.arc(steamX, steamY, steamSize, 0, Math.PI * 2)
-          ctx.fill()
-        }
-      }
+      ctx.fillText(`${bottlesFilled} BTL`, 20, panelY + 30)
 
       ctx.restore()
+    }
+
+    function drawBottle(ctx, x, y, fillLevel, capped) {
+      // Corps de la bouteille
+      const bottleGrad = ctx.createLinearGradient(x - 15, y - 40, x + 15, y)
+      bottleGrad.addColorStop(0, 'rgba(255, 255, 255, 0.3)')
+      bottleGrad.addColorStop(0.5, 'rgba(255, 255, 255, 0.1)')
+      bottleGrad.addColorStop(1, 'rgba(255, 255, 255, 0.2)')
+      ctx.fillStyle = bottleGrad
+      
+      ctx.beginPath()
+      ctx.moveTo(x - 12, y)
+      ctx.lineTo(x - 12, y - 30)
+      ctx.lineTo(x - 8, y - 35)
+      ctx.lineTo(x - 8, y - 42)
+      ctx.lineTo(x + 8, y - 42)
+      ctx.lineTo(x + 8, y - 35)
+      ctx.lineTo(x + 12, y - 30)
+      ctx.lineTo(x + 12, y)
+      ctx.closePath()
+      ctx.fill()
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)'
+      ctx.lineWidth = 1
+      ctx.stroke()
+
+      // Eau dans la bouteille
+      if (fillLevel > 0) {
+        const waterHeight = (fillLevel / 100) * 30
+        const waterGrad = ctx.createLinearGradient(x, y, x, y - waterHeight)
+        waterGrad.addColorStop(0, '#3b82f6')
+        waterGrad.addColorStop(1, '#60a5fa')
+        ctx.fillStyle = waterGrad
+        
+        ctx.beginPath()
+        ctx.moveTo(x - 11, y)
+        ctx.lineTo(x - 11, y - waterHeight)
+        ctx.lineTo(x + 11, y - waterHeight)
+        ctx.lineTo(x + 11, y)
+        ctx.closePath()
+        ctx.fill()
+        
+        // Reflets sur l'eau
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.3)'
+        ctx.fillRect(x - 10, y - waterHeight + 2, 4, waterHeight - 4)
+      }
+
+      // Bouchon
+      if (capped) {
+        ctx.fillStyle = '#ef4444'
+        ctx.fillRect(x - 8, y - 45, 16, 5)
+        ctx.strokeStyle = '#991b1b'
+        ctx.lineWidth = 1
+        ctx.strokeRect(x - 8, y - 45, 16, 5)
+      }
     }
 
     function animate() {
@@ -226,7 +286,7 @@ function Roaster3D({ temperature, progress, running, drumSpeed }) {
         cancelAnimationFrame(animationRef.current)
       }
     }
-  }, [temperature, running, drumSpeed])
+  }, [waterLevel, running, conveyorSpeed, bottlesFilled, waitingForFilling, waitingForCapping])
 
   return (
     <canvas 
@@ -242,16 +302,20 @@ export default function App() {
   const params = parseParams()
   const [sessionParams] = useState(params)
   const [message, setMessage] = useState('')
-  const [stage, setStage] = useState('idle') // idle, preheating, roasting, cooling, finished
+  const [stage, setStage] = useState('idle') // idle, filling, capping, finished
 
   // État de la simulation
   const [running, setRunning] = useState(false)
   const [progress, setProgress] = useState(0)
-  const [targetTime, setTargetTime] = useState(300)
-  const [temperature, setTemperature] = useState(25)
-  const [targetTemp, setTargetTemp] = useState(220)
-  const [drumSpeed, setDrumSpeed] = useState(0.02)
+  const [targetBottles, setTargetBottles] = useState(50)
+  const [waterLevel, setWaterLevel] = useState(0)
+  const [bottlesFilled, setBottlesFilled] = useState(0)
+  const [conveyorSpeed, setConveyorSpeed] = useState(2)
+  const [fillRate, setFillRate] = useState(5)
   const [events, setEvents] = useState([])
+  const [currentBottleReady, setCurrentBottleReady] = useState(true)
+  const [waitingForFilling, setWaitingForFilling] = useState(false)
+  const [waitingForCapping, setWaitingForCapping] = useState(false)
   const intervalRef = useRef(null)
   const startedAtRef = useRef(null)
 
@@ -260,46 +324,73 @@ export default function App() {
   useEffect(() => {
     if (running) {
       startedAtRef.current = new Date()
-      setEvents(ev => [...ev, { ts: nowISO(), code: 'ACTION.START', label: 'Démarrage de la torréfaction' }])
+      setEvents(ev => [...ev, { ts: nowISO(), code: 'ACTION.START', label: 'Démarrage de la ligne d\'embouteillage' }])
       
       intervalRef.current = setInterval(() => {
-        setProgress(p => {
-          const np = p + 1
-          
-          // Gestion des étapes
-          if (np < 60) {
-            setStage('preheating')
-            setTemperature(t => Math.min(targetTemp, t + 3))
-          } else if (np < targetTime - 30) {
-            setStage('roasting')
-            const tempVariation = (Math.random() - 0.5) * 2
-            setTemperature(t => Math.max(180, Math.min(250, t + tempVariation)))
-            
-            if (Math.random() < 0.15) {
-              const crackStage = np < targetTime / 2 ? 'Premier crack' : 'Second crack'
-              setEvents(ev => [...ev, { 
-                ts: nowISO(), 
-                code: 'EVENT.CRACK', 
-                label: crackStage,
-                meta: { temperature: Math.round(temperature), time: np }
-              }])
-            }
-          } else if (np < targetTime) {
-            setStage('cooling')
-            setTemperature(t => Math.max(60, t - 4))
-          } else {
-            setStage('finished')
-            setRunning(false)
-          }
-          
-          return np
-        })
+        setProgress(p => p + 1)
       }, 1000)
     }
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current)
     }
-  }, [running, targetTime, targetTemp])
+  }, [running])
+
+  // Fonction manuelle de remplissage
+  function startFilling() {
+    if (!running || !currentBottleReady || waitingForFilling) return
+    
+    setWaitingForFilling(true)
+    setStage('filling')
+    setEvents(ev => [...ev, { ts: nowISO(), code: 'ACTION.FILL_START', label: 'Début du remplissage' }])
+    
+    const fillInterval = setInterval(() => {
+      setWaterLevel(w => {
+        if (w >= 100) {
+          clearInterval(fillInterval)
+          setWaitingForFilling(false)
+          setWaitingForCapping(true)
+          setStage('capping')
+          setEvents(ev => [...ev, { ts: nowISO(), code: 'ACTION.FILL_COMPLETE', label: 'Remplissage terminé' }])
+          return 100
+        }
+        return w + fillRate
+      })
+    }, 100)
+  }
+
+  // Fonction manuelle de bouchonnage
+  function startCapping() {
+    if (!running || !waitingForCapping) return
+    
+    setEvents(ev => [...ev, { ts: nowISO(), code: 'ACTION.CAP_START', label: 'Bouchonnage en cours' }])
+    
+    setTimeout(() => {
+      setBottlesFilled(b => {
+        const newCount = b + 1
+        if (newCount >= targetBottles) {
+          setRunning(false)
+          setStage('finished')
+        }
+        
+        if (newCount % 10 === 0) {
+          setEvents(ev => [...ev, { 
+            ts: nowISO(), 
+            code: 'EVENT.MILESTONE', 
+            label: `${newCount} bouteilles remplies`,
+            meta: { count: newCount }
+          }])
+        }
+        
+        return newCount
+      })
+      
+      setWaterLevel(0)
+      setWaitingForCapping(false)
+      setCurrentBottleReady(true)
+      setStage('idle')
+      setEvents(ev => [...ev, { ts: nowISO(), code: 'ACTION.CAP_COMPLETE', label: 'Bouteille terminée' }])
+    }, 1000)
+  }
 
   function start() {
     if (!hasValidParams) {
@@ -309,15 +400,19 @@ export default function App() {
     }
     setEvents([])
     setProgress(0)
-    setTemperature(25)
+    setWaterLevel(0)
+    setBottlesFilled(0)
     setStage('idle')
+    setCurrentBottleReady(true)
+    setWaitingForFilling(false)
+    setWaitingForCapping(false)
     setRunning(true)
   }
 
   function stop() {
     setRunning(false)
     setStage('finished')
-    setEvents(ev => [...ev, { ts: nowISO(), code: 'ACTION.STOP', label: 'Arrêt manuel' }])
+    setEvents(ev => [...ev, { ts: nowISO(), code: 'ACTION.STOP', label: 'Arrêt manuel de la ligne' }])
   }
 
   async function finishAndSend() {
@@ -329,9 +424,9 @@ export default function App() {
     const endedAt = new Date()
     const startedAt = startedAtRef.current || new Date(endedAt.getTime() - progress*1000)
 
-    const timeScore = Math.max(0, 100 - Math.abs(targetTime - progress) / targetTime * 100)
-    const tempStability = Math.max(0, 100 - Math.abs(targetTemp - temperature) / targetTemp * 100)
-    const score = Math.round(Math.min(100, (timeScore*0.7 + tempStability*0.3)))
+    const efficiency = Math.min(100, (bottlesFilled / targetBottles) * 100)
+    const timeScore = Math.max(0, 100 - (progress / (targetBottles * 2)) * 100)
+    const score = Math.round(Math.min(100, (efficiency*0.7 + timeScore*0.3)))
 
     const payload = {
       schema_version: '1.0.0',
@@ -348,16 +443,17 @@ export default function App() {
       },
       metrics: [
         { code: 'TIME_TOTAL', label: 'Temps total', value: progress, unit: 's' },
-        { code: 'PEAK_TEMP', label: 'Température finale', value: Math.round(temperature), unit: '°C' }
+        { code: 'BOTTLES_FILLED', label: 'Bouteilles remplies', value: bottlesFilled, unit: 'btl' },
+        { code: 'EFFICIENCY', label: 'Efficacité', value: Math.round(efficiency), unit: '%' }
       ],
       events,
       competencies: [],
       artifacts: [
         { type: 'file', label: 'Session log', url: 'data:application/json;base64,' + btoa(JSON.stringify({ events })) }
       ],
-      raw_logs: [`Simulation 3D générée. progress=${progress}`],
+      raw_logs: [`Simulation 3D générée. bottles=${bottlesFilled}`],
       diagnostics: {
-        simulator_version: '2.0.0-3d',
+        simulator_version: '2.0.0-bottling-3d',
         engine: 'react-canvas-3d',
         user_agent: navigator.userAgent
       }
@@ -383,11 +479,10 @@ export default function App() {
   }, [running, stage])
 
   const stageLabels = {
-    idle: '⏸️ En attente',
-    preheating: '🔥 Préchauffage',
-    roasting: '☕ Torréfaction',
-    cooling: '❄️ Refroidissement',
-    finished: '✓ Terminé'
+    idle: '⏳ Prêt pour remplissage',
+    filling: '💧 Remplissage en cours',
+    capping: '✓ Prêt pour bouchonnage',
+    finished: '✓ Production terminée'
   }
 
   return (
@@ -395,10 +490,10 @@ export default function App() {
       <div className="max-w-6xl mx-auto">
         <div className="bg-slate-800 shadow-2xl rounded-xl p-6 mb-4 border border-slate-700">
           <h1 className="text-3xl font-bold text-white mb-2 flex items-center gap-3">
-            ☕ Simulateur 3D Torréfacteur de Café
+            💧 Simulateur 3D Ligne d'Embouteillage d'Eau
           </h1>
           <p className="text-slate-300 text-sm mb-4">
-            Simulation interactive avec visualisation 3D et intégration Way2tech.ai
+            Simulation interactive de remplissage et bouchonnage avec visualisation 3D et intégration Way2tech.ai
           </p>
 
           {!hasValidParams && (
@@ -411,22 +506,25 @@ export default function App() {
             {/* Gauche: Visualisation 3D */}
             <div className="space-y-4">
               <div className="bg-slate-900 rounded-xl p-4 border border-slate-700">
-                <Roaster3D 
-                  temperature={temperature}
+                <BottlingLine3D 
+                  waterLevel={waterLevel}
                   progress={progress}
                   running={running}
-                  drumSpeed={drumSpeed}
+                  conveyorSpeed={conveyorSpeed}
+                  bottlesFilled={bottlesFilled}
+                  waitingForFilling={waitingForFilling}
+                  waitingForCapping={waitingForCapping}
                 />
               </div>
 
               {/* Indicateur d'étape */}
               <div className="bg-slate-700 rounded-lg p-4 text-center">
                 <div className="text-2xl font-bold text-white mb-1">{stageLabels[stage]}</div>
-                <div className="text-slate-300">{progress}s / {targetTime}s</div>
+                <div className="text-slate-300">{bottlesFilled} / {targetBottles} bouteilles</div>
                 <div className="w-full bg-slate-600 h-2 rounded-full mt-2 overflow-hidden">
                   <div 
-                    className="bg-gradient-to-r from-green-500 via-yellow-500 to-red-500 h-full transition-all duration-300"
-                    style={{ width: `${(progress / targetTime) * 100}%` }}
+                    className="bg-gradient-to-r from-blue-500 via-cyan-500 to-green-500 h-full transition-all duration-300"
+                    style={{ width: `${(bottlesFilled / targetBottles) * 100}%` }}
                   />
                 </div>
               </div>
@@ -439,38 +537,42 @@ export default function App() {
                 <h3 className="text-lg font-semibold text-white mb-3">⚙️ Contrôles</h3>
                 <div className="space-y-3">
                   <div>
-                    <label className="text-slate-300 text-sm block mb-1">Temps cible (secondes)</label>
+                    <label className="text-slate-300 text-sm block mb-1">Nombre de bouteilles cible</label>
                     <input 
                       type="number" 
-                      value={targetTime} 
-                      onChange={e => setTargetTime(Number(e.target.value))} 
+                      value={targetBottles} 
+                      onChange={e => setTargetBottles(Number(e.target.value))} 
                       disabled={running}
                       className="w-full p-2 bg-slate-600 text-white rounded border border-slate-500 disabled:opacity-50"
                     />
                   </div>
                   <div>
-                    <label className="text-slate-300 text-sm block mb-1">Température cible (°C)</label>
-                    <input 
-                      type="number" 
-                      value={targetTemp} 
-                      onChange={e => setTargetTemp(Number(e.target.value))} 
-                      disabled={running}
-                      className="w-full p-2 bg-slate-600 text-white rounded border border-slate-500 disabled:opacity-50"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-slate-300 text-sm block mb-1">Vitesse du tambour</label>
+                    <label className="text-slate-300 text-sm block mb-1">Vitesse de remplissage</label>
                     <input 
                       type="range" 
-                      min="0.01" 
-                      max="0.08" 
-                      step="0.01"
-                      value={drumSpeed} 
-                      onChange={e => setDrumSpeed(Number(e.target.value))}
+                      min="2" 
+                      max="10" 
+                      step="1"
+                      value={fillRate} 
+                      onChange={e => setFillRate(Number(e.target.value))}
                       disabled={running}
                       className="w-full disabled:opacity-50"
                     />
-                    <div className="text-xs text-slate-400 text-center">{(drumSpeed * 100).toFixed(0)} RPM</div>
+                    <div className="text-xs text-slate-400 text-center">{fillRate} L/s</div>
+                  </div>
+                  <div>
+                    <label className="text-slate-300 text-sm block mb-1">Vitesse du convoyeur</label>
+                    <input 
+                      type="range" 
+                      min="1" 
+                      max="5" 
+                      step="0.5"
+                      value={conveyorSpeed} 
+                      onChange={e => setConveyorSpeed(Number(e.target.value))}
+                      disabled={running}
+                      className="w-full disabled:opacity-50"
+                    />
+                    <div className="text-xs text-slate-400 text-center">{conveyorSpeed} m/s</div>
                   </div>
                   <div className="flex gap-2 pt-2">
                     {!running ? (
@@ -492,17 +594,64 @@ export default function App() {
                 </div>
               </div>
 
+              {/* Actions manuelles */}
+              {running && (
+                <div className="bg-slate-700 rounded-lg p-4">
+                  <h3 className="text-lg font-semibold text-white mb-3">🖐️ Actions Manuelles</h3>
+                  <div className="space-y-3">
+                    <button 
+                      onClick={startFilling}
+                      disabled={!currentBottleReady || waitingForFilling || waitingForCapping}
+                      className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-500 disabled:cursor-not-allowed text-white font-semibold py-3 px-4 rounded-lg transition flex items-center justify-center gap-2"
+                    >
+                      💧 Lancer le Remplissage
+                      {waitingForFilling && <span className="text-xs">(en cours...)</span>}
+                    </button>
+                    
+                    <button 
+                      onClick={startCapping}
+                      disabled={!waitingForCapping}
+                      className="w-full bg-red-600 hover:bg-red-700 disabled:bg-slate-500 disabled:cursor-not-allowed text-white font-semibold py-3 px-4 rounded-lg transition flex items-center justify-center gap-2"
+                    >
+                      🔴 Placer le Bouchon
+                      {!waitingForCapping && waterLevel === 0 && <span className="text-xs">(remplir d'abord)</span>}
+                    </button>
+
+                    <div className="bg-slate-800 p-3 rounded text-sm">
+                      <div className="text-slate-400 mb-2">État actuel:</div>
+                      <div className="text-white font-semibold">
+                        {currentBottleReady && !waitingForFilling && !waitingForCapping && '⏳ Bouteille prête - Cliquez sur "Lancer le Remplissage"'}
+                        {waitingForFilling && '💧 Remplissage en cours...'}
+                        {waitingForCapping && '✓ Bouteille pleine - Cliquez sur "Placer le Bouchon"'}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+              )}
+              </div>
+
+
+
               {/* Métriques */}
               <div className="bg-slate-700 rounded-lg p-4">
                 <h3 className="text-lg font-semibold text-white mb-3">📊 Métriques</h3>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="bg-slate-600 p-3 rounded">
-                    <div className="text-xs text-slate-400">Température</div>
-                    <div className="text-2xl font-bold text-orange-400">{Math.round(temperature)}°C</div>
+                    <div className="text-xs text-slate-400">Bouteilles</div>
+                    <div className="text-2xl font-bold text-blue-400">{bottlesFilled}</div>
                   </div>
                   <div className="bg-slate-600 p-3 rounded">
                     <div className="text-xs text-slate-400">Progression</div>
-                    <div className="text-2xl font-bold text-blue-400">{Math.round((progress/targetTime)*100)}%</div>
+                    <div className="text-2xl font-bold text-green-400">{Math.round((bottlesFilled/targetBottles)*100)}%</div>
+                  </div>
+                  <div className="bg-slate-600 p-3 rounded">
+                    <div className="text-xs text-slate-400">Temps écoulé</div>
+                    <div className="text-2xl font-bold text-cyan-400">{progress}s</div>
+                  </div>
+                  <div className="bg-slate-600 p-3 rounded">
+                    <div className="text-xs text-slate-400">Niveau eau</div>
+                    <div className="text-2xl font-bold text-sky-400">{Math.round(waterLevel)}%</div>
                   </div>
                 </div>
               </div>
@@ -516,7 +665,7 @@ export default function App() {
                   ) : (
                     events.slice().reverse().slice(0, 10).map((e, i) => (
                       <div key={i} className="text-xs text-slate-300 mb-1 font-mono">
-                        <span className="text-green-400">{e.code}</span> — {e.label}
+                        <span className="text-cyan-400">{e.code}</span> — {e.label}
                         {e.meta && <span className="text-slate-500"> {JSON.stringify(e.meta)}</span>}
                       </div>
                     ))
@@ -534,7 +683,7 @@ export default function App() {
         </div>
 
         <div className="text-center text-slate-500 text-xs">
-          Simulateur v2.0 avec rendu 3D — Way2tech.ai integration
+          Simulateur v2.0 avec rendu 3D — Ligne d'embouteillage — Way2tech.ai integration
         </div>
       </div>
     </div>
