@@ -505,6 +505,7 @@ export default function App() {
           <div className="grid lg:grid-cols-2 gap-6">
             {/* Gauche: Visualisation 3D */}
             <div className="space-y-4">
+
               <div className="bg-slate-900 rounded-xl p-4 border border-slate-700">
                 <BottlingLine3D 
                   waterLevel={waterLevel}
@@ -528,6 +529,7 @@ export default function App() {
                   />
                 </div>
               </div>
+
             </div>
 
             {/* Droite: Contrôles et informations */}
@@ -629,9 +631,20 @@ export default function App() {
                 </div>
 
               )}
+
+              {/* Niveau d'eau */}
+              <div className="bg-slate-700 rounded-lg p-4">
+                <h3 className="text-lg font-semibold text-white mb-3">💧 Niveau d'Eau</h3>
+                
+                <div className="w-full bg-slate-600 h-6 rounded-full overflow-hidden">
+                  <div 
+                    className="bg-gradient-to-r from-blue-500 via-cyan-500 to-green-500 h-full transition-all duration-300"
+                    style={{ width: `${waterLevel}%` }}
+                  />
+                </div>
+                <div className="text-slate-300 text-sm mt-2 text-center">{Math.round(waterLevel)}%</div>
+
               </div>
-
-
 
               {/* Métriques */}
               <div className="bg-slate-700 rounded-lg p-4">
@@ -673,6 +686,8 @@ export default function App() {
                 </div>
               </div>
             </div>
+
+
           </div>
 
           {message && (
@@ -685,6 +700,7 @@ export default function App() {
         <div className="text-center text-slate-500 text-xs">
           Simulateur v2.0 avec rendu 3D — Ligne d'embouteillage — Way2tech.ai integration
         </div>
+
       </div>
     </div>
   )
