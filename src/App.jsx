@@ -536,7 +536,7 @@ export default function App() {
             <div className="space-y-4">
               {/* Contrôles */}
               <div className="bg-slate-700 rounded-lg p-4">
-                <h3 className="text-lg font-semibold text-white mb-3">⚙️ Contrôles</h3>
+                <h3 className="text-lg font-semibold text-white mb-3">⚙️ ContrOles</h3>
                 <div className="space-y-3">
                   <div>
                     <label className="text-slate-300 text-sm block mb-1">Nombre de bouteilles cible</label>
