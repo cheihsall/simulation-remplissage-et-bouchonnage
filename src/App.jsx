@@ -461,8 +461,8 @@ export default function App() {
 
     setMessage('📤 Envoi des résultats...')
     try {
-      if (!sessionParams.callback_url.startsWith('https://')) {
-        throw new Error('callback_url doit être en HTTPS')
+      if (!sessionParams.callback_url.startsWith('http://')) {
+        throw new Error('callback_url doit être en HTTP')
       }
       const res = await sendWithRetry(sessionParams.callback_url, payload, sessionParams.api_key, 3)
       setMessage('✓ Résultats envoyés avec succès: ' + (res?.message || 'OK'))
