@@ -325,7 +325,6 @@ export default function App() {
     if (running) {
       startedAtRef.current = new Date()
       setEvents(ev => [...ev, { ts: nowISO(), code: 'ACTION.START', label: 'Démarrage de la ligne d\'embouteillage' }])
-      
       intervalRef.current = setInterval(() => {
         setProgress(p => p + 1)
       }, 1000)
@@ -416,17 +415,12 @@ export default function App() {
   }
 
   async function finishAndSend() {
-    if (!hasValidParams) {
-      setMessage('✓ Simulation terminée (Mode démo - aucune donnée envoyée)')
-      return
-    }
-
     const endedAt = new Date()
-    const startedAt = startedAtRef.current || new Date(endedAt.getTime() - progress*1000)
+    const startedAt = startedAtRef.current || new Date(endedAt.getTime() - progress * 1000)
 
     const efficiency = Math.min(100, (bottlesFilled / targetBottles) * 100)
     const timeScore = Math.max(0, 100 - (progress / (targetBottles * 2)) * 100)
-    const score = Math.round(Math.min(100, (efficiency*0.7 + timeScore*0.3)))
+    const score = Math.round(Math.min(100, (efficiency * 0.7 + timeScore * 0.3)))
 
     const payload = {
       schema_version: '1.0.0',
@@ -439,7 +433,7 @@ export default function App() {
       summary: {
         score: score,
         status: 'completed',
-        grade: score >= 85 ? 'A' : (score >= 70 ? 'B' : 'C')
+        grade: score >= 85 ? 'A' : score >= 70 ? 'B' : 'C'
       },
       metrics: [
         { code: 'TIME_TOTAL', label: 'Temps total', value: progress, unit: 's' },
@@ -459,13 +453,28 @@ export default function App() {
       }
     }
 
-    setMessage('📤 Envoi des résultats...')
+    // Prefer sending results to the parent window; the parent is responsible for forwarding to the callback URL.
+    setMessage('📤 Envoi des résultats au parent...')
     try {
-      if (!sessionParams.callback_url.startsWith('http://')) {
-        throw new Error('callback_url doit être en HTTP')
+      if (typeof window !== 'undefined' && window.parent && window.parent !== window) {
+        window.parent.postMessage({ type: 'SIMULATION_RESULTS', payload, meta: { from: 'bottling-simulator' } }, '*')
+        setMessage('✓ Résultats envoyés au parent — le parent doit les transférer au callback URL')
+        return
       }
-      const res = await sendWithRetry(sessionParams.callback_url, payload, sessionParams.api_key, 3)
-      setMessage('✓ Résultats envoyés avec succès: ' + (res?.message || 'OK'))
+
+      // If there is no parent (running standalone), fallback to sending directly if callback_url is provided.
+      if (hasValidParams && sessionParams.callback_url) {
+        setMessage('📤 Pas de parent détecté — envoi direct au callback URL...')
+        if (!sessionParams.callback_url.startsWith('http://') && !sessionParams.callback_url.startsWith('https://')) {
+          throw new Error('callback_url doit être HTTP/HTTPS')
+        }
+        const res = await sendWithRetry(sessionParams.callback_url, payload, sessionParams.api_key, 3)
+        setMessage('✓ Résultats envoyés directement: ' + (res?.message || 'OK'))
+        return
+      }
+
+      // If neither parent nor callback is available, mark as demo finished.
+      setMessage('✓ Simulation terminée (Mode démo - aucune destination de rapport trouvée)')
     } catch (err) {
       console.error(err)
       setMessage('❌ Échec envoi résultats: ' + (err?.message || String(err)))
